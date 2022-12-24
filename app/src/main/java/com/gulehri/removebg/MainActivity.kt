@@ -18,6 +18,9 @@ import com.google.android.material.snackbar.Snackbar
 import com.gulehri.removebg.databinding.ActivityMainBinding
 import com.slowmac.autobackgroundremover.BackgroundRemover
 import com.slowmac.autobackgroundremover.OnBackgroundChangeListener
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import java.io.File
 import java.io.FileOutputStream
 import java.io.OutputStream
@@ -71,51 +74,69 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun saveMediaToStorage(bitmap: Bitmap?) {
-        bitmap?.let {
-            val filename = "${System.currentTimeMillis()}.png"
-            var fos: OutputStream? = null
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                contentResolver?.also { resolver ->
-                    val contentValues = ContentValues().apply {
-                        put(MediaStore.MediaColumns.DISPLAY_NAME, filename)
-                        put(MediaStore.MediaColumns.MIME_TYPE, "image/*")
-                        put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_PICTURES)
+        CoroutineScope(Dispatchers.IO).launch {
+            bitmap?.let {
+                val filename = "${System.currentTimeMillis()}.png"
+                var fos: OutputStream? = null
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    contentResolver?.also { resolver ->
+                        val contentValues = ContentValues().apply {
+                            put(MediaStore.MediaColumns.DISPLAY_NAME, filename)
+                            put(MediaStore.MediaColumns.MIME_TYPE, "image/*")
+                            put(
+                                MediaStore.MediaColumns.RELATIVE_PATH,
+                                Environment.DIRECTORY_PICTURES
+                            )
+                        }
+                        val imageUri: Uri? =
+                            resolver.insert(
+                                MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                                contentValues
+                            )
+                        fos = imageUri?.let { resolver.openOutputStream(it) }
                     }
-                    val imageUri: Uri? =
-                        resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
-                    fos = imageUri?.let { resolver.openOutputStream(it) }
+                } else {
+                    val imagesDir =
+                        Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
+                    val image = File(imagesDir, filename)
+                    fos = FileOutputStream(image)
                 }
-            } else {
-                val imagesDir =
-                    Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
-                val image = File(imagesDir, filename)
-                fos = FileOutputStream(image)
-            }
-            fos?.use {
-                bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)
-                "Saved to Photos".snack()
-            }
-        } ?: "Remove Background First".snack()
+                fos?.use {
+                    bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)
+                    "Saved to Photos".snack()
+                }
+            } ?: CoroutineScope(Dispatchers.Main).launch { "Remove Background First".snack() }
+        }
+
 
     }
 
 
-    private fun removeBackground(it: Uri) {
+    private fun removeBackground(uri: Uri) {
 
-        val bm = contentResolver.openInputStream(it).use { data ->
-            BitmapFactory.decodeStream(data)
+        CoroutineScope(Dispatchers.IO).launch {
+            val bm = contentResolver.openInputStream(uri).use { data ->
+                BitmapFactory.decodeStream(data)
+            }
+
+            BackgroundRemover.bitmapForProcessing(bm, false, object : OnBackgroundChangeListener {
+                override fun onSuccess(bitmap: Bitmap) {
+                    rBitmap = bitmap
+                    CoroutineScope(Dispatchers.Main).launch {
+                        binding.bgRemove.setImageBitmap(bitmap)
+                    }
+
+                }
+
+                override fun onFailed(exception: Exception) {
+                    CoroutineScope(Dispatchers.Main).launch {
+                    exception.message?.snack() ?: "Error".snack()
+                    }
+
+                }
+            })
         }
 
-        BackgroundRemover.bitmapForProcessing(bm, false, object : OnBackgroundChangeListener {
-            override fun onSuccess(bitmap: Bitmap) {
-                binding.bgRemove.setImageBitmap(bitmap)
-                rBitmap = bitmap
-            }
-
-            override fun onFailed(exception: Exception) {
-                exception.message?.snack() ?: "Error".snack()
-            }
-        })
     }
 
     private fun String.snack() = Snackbar.make(binding.root, this, Snackbar.LENGTH_SHORT).show()
