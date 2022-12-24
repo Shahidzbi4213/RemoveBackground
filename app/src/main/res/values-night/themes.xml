@@ -1,0 +1,9 @@
+<resources>
+    <!-- Base application theme. -->
+    <style name="Theme.RemoveBg" parent="Theme.Material3.DayNight">
+
+        <item name="android:statusBarColor">#00C853</item>
+        <item name="colorOnTertiary">#00C853</item>
+
+    </style>
+</resources>
