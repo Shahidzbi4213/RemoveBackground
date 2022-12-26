@@ -21,6 +21,7 @@ import com.slowmac.autobackgroundremover.OnBackgroundChangeListener
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
 import java.io.OutputStream
@@ -28,8 +29,8 @@ import java.io.OutputStream
 class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
-    private lateinit var uri: Uri
-    private lateinit var rBitmap: Bitmap
+    private var uri: Uri?= null
+    private  var rBitmap: Bitmap? = null
     private val permission = Manifest.permission.WRITE_EXTERNAL_STORAGE
 
     private val imagePicker = registerForActivityResult(ActivityResultContracts.PickVisualMedia()) {
@@ -57,7 +58,10 @@ class MainActivity : AppCompatActivity() {
         }
 
         binding.btnRemove.setOnClickListener {
-            removeBackground(uri)
+            uri?.let {
+                removeBackground(it)
+            } ?: "Select Image First".snack()
+
 
         }
 
@@ -68,14 +72,16 @@ class MainActivity : AppCompatActivity() {
                 ) == PackageManager.PERMISSION_GRANTED
             )
 
-                saveMediaToStorage(bitmap = rBitmap)
+                rBitmap?.let {
+                    saveMediaToStorage(bitmap = rBitmap)
+                } ?: "Remove Background First".snack()
+
             else storagePermission.launch(permission)
         }
     }
 
     private fun saveMediaToStorage(bitmap: Bitmap?) {
-        CoroutineScope(Dispatchers.IO).launch {
-            bitmap?.let {
+            CoroutineScope(Dispatchers.IO).launch {
                 val filename = "${System.currentTimeMillis()}.png"
                 var fos: OutputStream? = null
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -102,15 +108,12 @@ class MainActivity : AppCompatActivity() {
                     fos = FileOutputStream(image)
                 }
                 fos?.use {
-                    bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)
+                    bitmap!!.compress(Bitmap.CompressFormat.PNG, 100, it)
                     "Saved to Photos".snack()
                 }
-            } ?: CoroutineScope(Dispatchers.Main).launch { "Remove Background First".snack() }
+
+            }
         }
-
-
-    }
-
 
     private fun removeBackground(uri: Uri) {
 
